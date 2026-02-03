@@ -1,0 +1,286 @@
+﻿<div class="layout-wrapper">
+    <div class="header">
+        <div class="header-main">
+            <img src="logo.png" alt="Movie Shreddle" class="header-logo">
+            <h1>Movie Shreddle</h1>
+        </div>
+        <button class="settings-trigger" (click)="toggleSettings()" title="Paramètres">
+            ⚙
+        </button>
+    </div>
+
+    <!-- Settings Menu Overlay -->
+    @if (showSettings()) {
+    <div class="settings-overlay" (click)="toggleSettings()">
+        <div class="settings-panel" (click)="$event.stopPropagation()">
+            <div class="settings-header">
+                <h3>Paramètres</h3>
+                <button class="close-settings" (click)="toggleSettings()">✕</button>
+            </div>
+            <div class="settings-content">
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Mémoire de l'Infini</span>
+                        <div class="tooltip-wrapper">
+                            <span class="info-icon">?</span>
+                            <div class="tooltip">Si activée, les films déjà vus ne réapparaîtront pas pendant 2 jours.
+                            </div>
+                        </div>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" [checked]="infiniteMemoryEnabled()" (change)="toggleInfiniteMemory()">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Langue des films (Infini)</span>
+                    </div>
+                    <select class="select-input" [value]="infiniteCountryFilter()"
+                        (change)="setInfiniteCountryFilter($any($event.target).value)">
+                        <option value="all">Tout</option>
+                        <option value="fr_en">Français et/ou Anglais</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Cache local</span>
+                    </div>
+                    @if (!showClearCacheConfirm()) {
+                    <button class="danger-btn" (click)="requestClearCache()">Vider le cache</button>
+                    } @else {
+                    <div class="confirm-inline">
+                        <span>Êtes-vous sûr ?</span>
+                        <button class="confirm-yes" (click)="clearCache()">Oui</button>
+                        <button class="confirm-no" (click)="cancelClearCache()">Non</button>
+                    </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    }
+
+    @if (showApiKeyPrompt()) {
+    <div class="apikey-overlay">
+        <div class="apikey-modal">
+            <h3>Clé API TMDB requise</h3>
+            <p>Colle ta clé API (Bearer token) pour activer l'application.</p>
+            <a class="apikey-help" href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">
+                Où trouver ma clé TMDB ?
+            </a>
+            <input class="apikey-input" type="text" [value]="apiKeyInput()"
+                (input)="apiKeyInput.set($any($event.target).value)" placeholder="eyJhbGciOiJIUzI1NiJ9...">
+            @if (apiKeyError()) {
+            <div class="apikey-error">{{ apiKeyError() }}</div>
+            }
+            <button class="apikey-validate" (click)="submitApiKey()">Valider</button>
+        </div>
+    </div>
+    }
+
+    @if (showLeaveConfirm()) {
+    <div class="leave-overlay">
+        <div class="leave-modal">
+            <h3>Quitter la page mettra fin à la série en cours.</h3>
+            <div class="leave-actions">
+                <button class="leave-confirm" (click)="confirmLeaveTab()">Changer de page</button>
+                <button class="leave-cancel" (click)="cancelLeaveTab()">Rester sur la page</button>
+            </div>
+        </div>
+    </div>
+    }
+
+    <div class="tab-bar">
+        <button class="tab" [class.active]="activeTab() === 'daily'" (click)="requestTabSwitch('daily')">
+            Daily
+        </button>
+        <button class="tab" [class.active]="activeTab() === 'hard'" (click)="requestTabSwitch('hard')">
+            Daily (Hard)
+        </button>
+        <button class="tab" [class.active]="activeTab() === 'infinite'" (click)="requestTabSwitch('infinite')">
+            Infini
+        </button>
+        <button class="tab" [class.active]="activeTab() === 'infinite-hard'" (click)="requestTabSwitch('infinite-hard')">
+            Infini (Hard)
+        </button>
+    </div>
+
+    <div class="main-content">
+        <div class="poster-section">
+            <div class="poster-frame" [style.aspect-ratio]="'2/3'">
+                @if (gameStatus() === 'loading') {
+                <div class="loader-overlay">
+                    <div class="spinner"></div>
+                </div>
+                }
+                @else if (gameStatus() === 'won' || gameStatus() === 'lost' || currentStripCount() === 1) {
+                <img [src]="imageUrl()" alt="Movie Poster" class="full-poster">
+                } @else {
+                <div class="strips-container">
+                    @for (stripIndex of shuffledStrips(); track $index) {
+                    <div class="strip" [ngClass]="getStripEffect(stripIndex)"
+                        [style.background-image]="'url(' + imageUrl() + ')'" [style.width.%]="100 / currentStripCount()"
+                        [style.background-position-x.%]="(stripIndex / (currentStripCount() - 1)) * 100"
+                        [style.background-size]="(currentStripCount() * 100) + '% 100%'">
+                    </div>
+                    }
+                </div>
+                }
+            </div>
+        </div>
+
+        <div class="controls-section">
+            <div class="status-card">
+                <h2>Game Status</h2>
+
+                @if (activeTab() === 'infinite' || activeTab() === 'infinite-hard') {
+                <div class="streak-stats">
+                    <div class="stat-row">
+                        <span class="label">Série en cours @if (activeTab() === 'infinite-hard') {(Infini Hard)} @else {(Infini)} :</span>
+                        <span class="value accent">{{ currentStreak() }}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="label">Record du jour @if (activeTab() === 'infinite-hard') {(Infini Hard)} @else {(Infini)} :</span>
+                        <span class="value">{{ todayBestStreak() }}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="label">Record absolu @if (activeTab() === 'infinite-hard') {(Infini Hard)} @else {(Infini)} :</span>
+                        <span class="value">{{ allTimeBestStreak() }}</span>
+                    </div>
+                </div>
+                <hr class="stat-divider">
+                }
+
+                <div class="stat-row">
+                    <span class="label">Bandes :</span>
+                    <span class="value">{{ currentStripCount() }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="label">Essais restants :</span>
+                    <span class="value">{{ remainingAttempts() }} / {{ progressionSteps.length }}</span>
+                </div>
+
+                @if (activeTab() === 'hard' || activeTab() === 'infinite-hard') {
+                <div class="hard-stats">
+                    <div class="stat-row">
+                        <span class="label">Bandes noir & blanc :</span>
+                        <span class="value">{{ hardGrayscaleCount() }}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="label">Bandes à l'envers :</span>
+                        <span class="value">{{ hardRotateCount() }}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="label">Bandes noires :</span>
+                        <span class="value">{{ hardBlackoutCount() }}</span>
+                    </div>
+                </div>
+                }
+
+                @if (dailyCompleted() && activeTab() !== 'infinite') {
+                <div class="result-message won">
+                    <span>Daily game du {{ dailyCompletedDate() }} trouvé !</span>
+                    <p>{{ movie()?.title }} @if (releaseYear()) { ({{ releaseYear() }}) }</p>
+                    @if (imdbUrl()) {
+                    <a class="imdb-link" [href]="imdbUrl()" target="_blank" rel="noopener">Voir sur IMDb</a>
+                    }
+                </div>
+                }
+                @else if (gameStatus() === 'won') {
+                <div class="result-message won">
+                    <span>VICTOIRE !</span>
+                    <p>{{ movie()?.title }} @if (releaseYear()) { ({{ releaseYear() }}) }</p>
+                    @if (imdbUrl()) {
+                    <a class="imdb-link" [href]="imdbUrl()" target="_blank" rel="noopener">Voir sur IMDb</a>
+                    }
+                </div>
+                }
+                @if (gameStatus() === 'lost') {
+                <div class="result-message lost">
+                    <span>PERDU...</span>
+                    <p>Le film était : <strong>{{ movie()?.title }}</strong> @if (releaseYear()) { ({{ releaseYear() }}) }</p>
+                    @if (imdbUrl()) {
+                    <a class="imdb-link" [href]="imdbUrl()" target="_blank" rel="noopener">Voir sur IMDb</a>
+                    }
+                </div>
+                }
+            </div>
+
+            <div class="input-card">
+                @if (gameStatus() === 'won' && (activeTab() === 'infinite' || activeTab() === 'infinite-hard')) {
+                <button class="next-movie-btn" (click)="loadNextInfiniteMovie()">
+                    Film Suivant →
+                </button>
+                } @else {
+                <h3>Votre proposition</h3>
+                <div class="input-wrapper" style="position: relative;">
+                    <input type="text" [ngModel]="userGuess()" (ngModelChange)="onInput($event)"
+                        (keyup.enter)="validateGuess()" placeholder="Nom du film..."
+                        [disabled]="gameStatus() !== 'playing'" class="search-input">
+
+                    @if (suggestions().length > 0 && gameStatus() === 'playing') {
+                    <ul class="suggestions-list">
+                        @for (movie of suggestions(); track movie.id) {
+                        <li (click)="selectSuggestion(movie)">
+                            {{ movie.title }} <span class="year-badge">{{ movie.release_date | date:'yyyy' }}</span>
+                        </li>
+                        }
+                    </ul>
+                    }
+                </div>
+
+                <div class="actions">
+                    @if ((activeTab() === 'infinite' || activeTab() === 'infinite-hard') && gameStatus() === 'lost') {
+                    <button (click)="loadNextInfiniteMovie()">
+                        Réessayer
+                    </button>
+                    } @else {
+                    <button (click)="validateGuess()" [disabled]="gameStatus() !== 'playing'">
+                        {{ userGuess().trim() ? 'Valider' : 'Skip' }}
+                    </button>
+                    }
+                    <div class="give-up-wrapper" style="position: relative; width: 100%;">
+                        <button class="give-up-btn" (click)="giveUp()" [disabled]="gameStatus() !== 'playing'">
+                            Abandonner
+                        </button>
+                        @if (showGiveUpConfirm()) {
+                        <div class="give-up-confirm">
+                            <p>Êtes-vous sûr ?</p>
+                            <div class="confirm-buttons">
+                                <button class="confirm-yes" (click)="confirmGiveUp()">Oui</button>
+                                <button class="confirm-no" (click)="cancelGiveUp()">Non</button>
+                            </div>
+                        </div>
+                        }
+                    </div>
+                </div>
+                <p class="hint-text">(Devinez le titre exact du film !)</p>
+                }
+            </div>
+
+        </div>
+
+        @if (wrongGuesses().length > 0) {
+        <div class="history-card">
+            <h4>Essais précédents :</h4>
+            <ul>
+                @for (entry of wrongGuesses(); track $index) {
+                <li>
+                    @if (entry.guess === 'SKIPPED') {
+                    SKIPPED
+                    } @else {
+                    {{ entry.guess }}@if (entry.year) { <span class="year"> ({{ entry.year }})</span> }
+                    }
+                </li>
+                }
+            </ul>
+        </div>
+        }
+    </div>
+
+    <div class="tmdb-credit">
+        <span>powered by</span>
+        <img src="tmdb-logo.svg" alt="TMDB" class="tmdb-logo">
+    </div>
+</div>
