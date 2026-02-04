@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "daily-game": {
+    "MovieShreddle": {
       "projectType": "application",
       "schematics": {},
       "root": "",
@@ -13,7 +13,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:application",
           "options": {
-            "outputPath": "dist/daily-game",
+            "outputPath": "dist/MovieShreddle",
             "index": "src/index.html",
             "browser": "src/main.ts",
             "polyfills": [
@@ -59,10 +59,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "daily-game:build:production"
+              "buildTarget": "MovieShreddle:build:production"
             },
             "development": {
-              "buildTarget": "daily-game:build:development"
+              "buildTarget": "MovieShreddle:build:development"
             }
           },
           "defaultConfiguration": "development"

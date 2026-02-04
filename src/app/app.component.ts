@@ -9,5 +9,5 @@ import { PosterGameComponent } from './poster-game/poster-game.component';
   styleUrl: './app.component.css'
 })
 export class AppComponent {
-  title = 'daily-game';
+  title = 'MovieShreddle';
 }
