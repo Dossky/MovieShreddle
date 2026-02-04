@@ -384,7 +384,7 @@
     max-width: 1400px;
     margin: 0 auto;
     width: 100%;
-    min-height: calc(100vh - 160px);
+    min-height: auto;
 }
 
 /* Poster Section */
@@ -399,7 +399,7 @@
 .poster-frame {
     width: 100%;
     max-width: 480px;
-    max-height: calc(100vh - 200px);
+    aspect-ratio: 2 / 3;
     background: linear-gradient(180deg, rgba(58, 32, 56, 0.55) 0%, rgba(24, 18, 40, 0.35) 100%);
     border-radius: 20px;
     overflow: hidden;
@@ -411,7 +411,7 @@
 .full-poster {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     display: block;
 }
 
@@ -426,6 +426,7 @@
     height: 100%;
     background-repeat: no-repeat;
     transition: all 0.5s ease-in-out;
+    background-size: 100% 100%;
 }
 
 /* Hard Mode Effects */
@@ -743,7 +744,6 @@ input:checked+.slider:before {
     border-radius: 12px;
     border: 1px solid rgba(255, 177, 97, 0.35);
     align-self: flex-start;
-    max-height: calc(100vh - 220px);
     overflow-y: auto;
 }
 
@@ -806,5 +806,147 @@ input:checked+.slider:before {
 
     .history-card {
         max-height: none;
+    }
+}
+
+@media (max-width: 900px) {
+    .header {
+        padding: 12px 20px;
+    }
+
+    .header-logo {
+        height: 48px;
+    }
+
+    .header h1 {
+        font-size: 1.5rem;
+    }
+
+    .tab {
+        padding: 10px 22px;
+        font-size: 0.95rem;
+    }
+
+    .main-content {
+        padding: 16px 18px 20px;
+        min-height: auto;
+    }
+
+    .poster-frame {
+        max-width: 420px;
+    }
+}
+
+@media (max-width: 700px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .settings-trigger {
+        align-self: flex-end;
+    }
+
+    .tab-bar {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+
+    .tab {
+        flex: 1 1 50%;
+        text-align: center;
+        padding: 10px 0;
+    }
+
+    .settings-panel {
+        width: 100%;
+    }
+
+    .poster-frame {
+        max-width: 360px;
+    }
+
+    .stat-row {
+        font-size: 0.95rem;
+    }
+}
+
+@media (max-width: 520px) {
+    .header-main {
+        gap: 12px;
+    }
+
+    .header h1 {
+        font-size: 1.2rem;
+    }
+
+    .header-logo {
+        height: 40px;
+    }
+
+    .tab {
+        flex: 1 1 100%;
+        font-size: 0.9rem;
+    }
+
+    .main-content {
+        padding: 14px 12px 18px;
+        gap: 14px;
+    }
+
+    .poster-frame {
+        max-width: 300px;
+        border-radius: 16px;
+    }
+
+    .status-card,
+    .input-card {
+        padding: 10px 12px;
+    }
+
+    .actions {
+        flex-direction: column;
+    }
+
+    .actions button {
+        width: 100%;
+    }
+
+    .give-up-confirm {
+        right: 0;
+        left: 0;
+        width: auto;
+    }
+
+    .setting-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .select-input {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .tmdb-credit {
+        position: static;
+        justify-content: center;
+        margin: 16px auto 8px;
+    }
+}
+
+@media (max-width: 400px) {
+    .poster-frame {
+        max-width: 260px;
+    }
+
+    .search-input {
+        padding: 10px 12px;
+        font-size: 0.95rem;
+    }
+
+    button {
+        padding: 10px;
     }
 }
