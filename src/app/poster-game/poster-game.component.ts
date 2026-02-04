@@ -523,8 +523,9 @@ export class PosterGameComponent implements OnInit {
         }
       }
     } else {
-      const year = selectedMovie?.release_date?.substring(0, 4) || '';
-      this.wrongGuesses.update(prev => [...prev, { guess: rawGuess, year }]);
+      const year = selectedMovie?.release_date?.substring(0, 4) || guessYear || '';
+      const guessLabel = guessTitle.trim() ? guessTitle : rawGuess;
+      this.wrongGuesses.update(prev => [...prev, { guess: guessLabel, year }]);
       this.nextStep();
     }
 
