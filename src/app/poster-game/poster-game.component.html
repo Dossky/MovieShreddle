@@ -1,11 +1,19 @@
-﻿<div class="layout-wrapper">
+<div class="layout-wrapper" [class.tv-mode]="mediaMode() === 'tv'">
     <div class="header">
         <div class="header-main">
             <img src="logo.png" alt="Movie Shreddle" class="header-logo">
-            <h1>Movie Shreddle</h1>
+            <div class="title-group">
+                <button class="title-toggle title-movie" [class.active]="mediaMode() === 'movie'" (click)="setMediaMode('movie')">
+                    Movie Shreddle
+                </button>
+                <span class="title-separator" aria-hidden="true"></span>
+                <button class="title-toggle title-tv" [class.active]="mediaMode() === 'tv'" (click)="setMediaMode('tv')">
+                    TV Show Shreddle
+                </button>
+            </div>
         </div>
-        <button class="settings-trigger" (click)="toggleSettings()" title="Paramètres">
-            ⚙
+        <button class="settings-trigger" (click)="toggleSettings()" title="Parametres">
+            &#9881;
         </button>
     </div>
 
@@ -23,7 +31,7 @@
                         <span class="setting-label">Mémoire de l'Infini</span>
                         <div class="tooltip-wrapper">
                             <span class="info-icon">?</span>
-                            <div class="tooltip">Si activée, les films déjà vus ne réapparaîtront pas pendant 2 jours.
+                            <div class="tooltip">Si activée, les titres déjà vus ne réapparaîtront pas pendant 2 jours.
                             </div>
                         </div>
                     </div>
@@ -34,7 +42,7 @@
                 </div>
                 <div class="setting-item">
                     <div class="setting-info">
-                        <span class="setting-label">Langue des films (Infini)</span>
+                        <span class="setting-label">Langue des {{ mediaTypeLabel() }} (Infini)</span>
                     </div>
                     <select class="select-input" [value]="infiniteCountryFilter()"
                         (change)="setInfiniteCountryFilter($any($event.target).value)">
@@ -199,7 +207,7 @@
                 @if (gameStatus() === 'lost') {
                 <div class="result-message lost">
                     <span>PERDU...</span>
-                    <p>Le film était : <strong>{{ movie()?.title }}</strong> @if (releaseYear()) { ({{ releaseYear() }}) }</p>
+                    <p>{{ mediaResultLabel() }} <strong>{{ movie()?.title }}</strong> @if (releaseYear()) { ({{ releaseYear() }}) }</p>
                     @if (imdbUrl()) {
                     <a class="imdb-link" [href]="imdbUrl()" target="_blank" rel="noopener">Voir sur IMDb</a>
                     }
@@ -210,13 +218,13 @@
             <div class="input-card">
                 @if (gameStatus() === 'won' && (activeTab() === 'infinite' || activeTab() === 'infinite-hard')) {
                 <button class="next-movie-btn" (click)="loadNextInfiniteMovie()">
-                    Film Suivant →
+                    {{ mediaNextLabel() }}
                 </button>
                 } @else {
                 <h3>Votre proposition</h3>
                 <div class="input-wrapper" style="position: relative;">
                     <input type="text" [ngModel]="userGuess()" (ngModelChange)="onInput($event)"
-                        (keyup.enter)="validateGuess()" placeholder="Nom du film..."
+                        (keyup.enter)="validateGuess()" [placeholder]="mediaInputPlaceholder()"
                         [disabled]="gameStatus() !== 'playing'" class="search-input">
 
                     @if (suggestions().length > 0 && gameStatus() === 'playing') {
@@ -255,7 +263,7 @@
                         }
                     </div>
                 </div>
-                <p class="hint-text">(Devinez le titre exact du film !)</p>
+                <p class="hint-text">{{ mediaHintText() }}</p>
                 }
             </div>
 

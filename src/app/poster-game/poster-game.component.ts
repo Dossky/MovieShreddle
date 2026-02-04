@@ -28,6 +28,7 @@ export class PosterGameComponent implements OnInit {
 
   // Tab State
   activeTab = signal<'daily' | 'hard' | 'infinite' | 'infinite-hard'>('daily');
+  mediaMode = signal<'movie' | 'tv'>('movie');
 
   // State
   movie = signal<Movie | null>(null);
@@ -39,6 +40,7 @@ export class PosterGameComponent implements OnInit {
   showGiveUpConfirm = signal(false);
   showLeaveConfirm = signal(false);
   pendingTab = signal<'daily' | 'hard' | 'infinite' | 'infinite-hard' | null>(null);
+  pendingMediaMode = signal<'movie' | 'tv' | null>(null);
   showClearCacheConfirm = signal(false);
   selectedMovieFromAutocomplete = signal<Movie | null>(null);
   dailyCompleted = signal(false);
@@ -73,17 +75,46 @@ export class PosterGameComponent implements OnInit {
   private readonly LS_DAILY_LOST_PREFIX = 'dailyGameLost_';
   private readonly LS_DAILY_HARD_LOST_PREFIX = 'dailyHardGameLost_';
   private readonly LS_SEEN_RANDOM = 'seenRandomMovies';
+  private readonly LS_SEEN_RANDOM_TV = 'seenRandomTvShows';
   private readonly LS_INFINITE_MEMORY = 'infiniteMemoryEnabled';
   private readonly LS_INFINITE_COUNTRY_FILTER = 'infiniteCountryFilter';
   private readonly LS_TMDB_TOKEN = 'tmdbToken';
+  private readonly LS_MEDIA_MODE = 'mediaMode';
   private readonly LS_CURRENT_STREAK = 'infiniteCurrentStreak';
   private readonly LS_TODAY_BEST_PREFIX = 'infiniteTodayBest_';
   private readonly LS_ALL_TIME_BEST = 'infiniteAllTimeBest';
   private readonly LS_CURRENT_STREAK_HARD = 'infiniteHardCurrentStreak';
   private readonly LS_TODAY_BEST_HARD_PREFIX = 'infiniteHardTodayBest_';
   private readonly LS_ALL_TIME_BEST_HARD = 'infiniteHardAllTimeBest';
+  private readonly LS_CURRENT_STREAK_TV = 'infiniteCurrentStreakTv';
+  private readonly LS_TODAY_BEST_PREFIX_TV = 'infiniteTodayBestTv_';
+  private readonly LS_ALL_TIME_BEST_TV = 'infiniteAllTimeBestTv';
+  private readonly LS_CURRENT_STREAK_HARD_TV = 'infiniteHardCurrentStreakTv';
+  private readonly LS_TODAY_BEST_HARD_PREFIX_TV = 'infiniteHardTodayBestTv_';
+  private readonly LS_ALL_TIME_BEST_HARD_TV = 'infiniteHardAllTimeBestTv';
+
+  private getStreakStorageKeys(mode: 'infinite' | 'infinite-hard') {
+    const isTv = this.mediaMode() === 'tv';
+    if (mode === 'infinite') {
+      return {
+        currentKey: isTv ? this.LS_CURRENT_STREAK_TV : this.LS_CURRENT_STREAK,
+        todayKey: isTv ? this.LS_TODAY_BEST_PREFIX_TV : this.LS_TODAY_BEST_PREFIX,
+        allTimeKey: isTv ? this.LS_ALL_TIME_BEST_TV : this.LS_ALL_TIME_BEST
+      };
+    }
+    return {
+      currentKey: isTv ? this.LS_CURRENT_STREAK_HARD_TV : this.LS_CURRENT_STREAK_HARD,
+      todayKey: isTv ? this.LS_TODAY_BEST_HARD_PREFIX_TV : this.LS_TODAY_BEST_HARD_PREFIX,
+      allTimeKey: isTv ? this.LS_ALL_TIME_BEST_HARD_TV : this.LS_ALL_TIME_BEST_HARD
+    };
+  }
 
   ngOnInit() {
+    const savedMode = localStorage.getItem(this.LS_MEDIA_MODE);
+    if (savedMode === 'tv') {
+      this.mediaMode.set('tv');
+    }
+
     // Load settings
     this.infiniteMemoryEnabled.set(localStorage.getItem(this.LS_INFINITE_MEMORY) !== 'false');
     const savedCountryFilter = localStorage.getItem(this.LS_INFINITE_COUNTRY_FILTER);
@@ -108,9 +139,38 @@ export class PosterGameComponent implements OnInit {
     this.initialized = true;
 
     // Check if daily game already completed (default tab: daily)
-    this.syncDailyOutcome('daily');
+    const active = this.activeTab();
+    if (active === 'daily' || active === 'hard') {
+      this.syncDailyOutcome(active);
+    }
+    this.loadForCurrentTab();
 
-    this.movieService.getDailyMovie().subscribe({
+    // Setup autocomplete
+    this.searchTerms.pipe(
+      debounceTime(300),
+      distinctUntilChanged(),
+      switchMap((term: string) => this.mediaMode() === 'tv'
+        ? this.movieService.searchTvShows(term)
+        : this.movieService.searchMovies(term)),
+    ).subscribe(movies => {
+      this.suggestions.set(movies);
+    });
+  }
+
+  private loadForCurrentTab() {
+    const tab = this.activeTab();
+    if (tab === 'infinite' || tab === 'infinite-hard') {
+      this.loadStreakData(tab);
+      this.loadInfiniteMovie();
+      return;
+    }
+
+    const isTv = this.mediaMode() === 'tv';
+    const movieObservable = tab === 'daily'
+      ? (isTv ? this.movieService.getDailyTvShow() : this.movieService.getDailyMovie())
+      : (isTv ? this.movieService.getDailyTvShowHard() : this.movieService.getDailyMovieHard());
+
+    movieObservable.subscribe({
       next: (movie) => {
         this.movie.set(movie);
         this.imdbUrl.set('');
@@ -122,31 +182,26 @@ export class PosterGameComponent implements OnInit {
           this.fetchImdbLink();
         } else {
           this.gameStatus.set('playing');
+          if (tab === 'hard') {
+            this.generateStripEffects();
+          }
         }
         this.wrongGuesses.set([]);
         this.showGiveUpConfirm.set(false);
-        console.log('Daily Movie:', movie.title);
+        console.log(`${tab} ${isTv ? 'TV' : 'Movie'}:`, movie.title);
       },
       error: (err) => {
-        console.error('Failed to load movie', err);
+        console.error('Failed to load media', err);
       }
-    });
-
-    // Setup autocomplete
-    this.searchTerms.pipe(
-      debounceTime(300),
-      distinctUntilChanged(),
-      switchMap((term: string) => this.movieService.searchMovies(term)),
-    ).subscribe(movies => {
-      this.suggestions.set(movies);
     });
   }
 
   private loadStreakData(mode: 'infinite' | 'infinite-hard') {
     const today = this.getTodayKey();
-    const currentKey = mode === 'infinite' ? this.LS_CURRENT_STREAK : this.LS_CURRENT_STREAK_HARD;
-    const todayKey = mode === 'infinite' ? this.LS_TODAY_BEST_PREFIX : this.LS_TODAY_BEST_HARD_PREFIX;
-    const allTimeKey = mode === 'infinite' ? this.LS_ALL_TIME_BEST : this.LS_ALL_TIME_BEST_HARD;
+    const keys = this.getStreakStorageKeys(mode);
+    const currentKey = keys.currentKey;
+    const todayKey = keys.todayKey;
+    const allTimeKey = keys.allTimeKey;
     this.currentStreak.set(parseInt(localStorage.getItem(currentKey) || '0', 10));
     this.todayBestStreak.set(parseInt(localStorage.getItem(todayKey + today) || '0', 10));
     this.allTimeBestStreak.set(parseInt(localStorage.getItem(allTimeKey) || '0', 10));
@@ -154,9 +209,10 @@ export class PosterGameComponent implements OnInit {
 
   private saveStreakData(mode: 'infinite' | 'infinite-hard') {
     const today = this.getTodayKey();
-    const currentKey = mode === 'infinite' ? this.LS_CURRENT_STREAK : this.LS_CURRENT_STREAK_HARD;
-    const todayKey = mode === 'infinite' ? this.LS_TODAY_BEST_PREFIX : this.LS_TODAY_BEST_HARD_PREFIX;
-    const allTimeKey = mode === 'infinite' ? this.LS_ALL_TIME_BEST : this.LS_ALL_TIME_BEST_HARD;
+    const keys = this.getStreakStorageKeys(mode);
+    const currentKey = keys.currentKey;
+    const todayKey = keys.todayKey;
+    const allTimeKey = keys.allTimeKey;
     localStorage.setItem(currentKey, this.currentStreak().toString());
     localStorage.setItem(todayKey + today, this.todayBestStreak().toString());
     localStorage.setItem(allTimeKey, this.allTimeBestStreak().toString());
@@ -172,6 +228,18 @@ export class PosterGameComponent implements OnInit {
     const month = key.substring(4, 6);
     const year = key.substring(2, 4);
     return `${day}/${month}/${year}`;
+  }
+
+  setMediaMode(mode: 'movie' | 'tv') {
+    if (this.mediaMode() === mode) return;
+    if (this.activeTab() === 'infinite' || this.activeTab() === 'infinite-hard') {
+      this.pendingMediaMode.set(mode);
+      this.showLeaveConfirm.set(true);
+      return;
+    }
+    this.mediaMode.set(mode);
+    localStorage.setItem(this.LS_MEDIA_MODE, mode);
+    this.switchTab(this.activeTab(), true);
   }
 
   toggleSettings() {
@@ -221,13 +289,23 @@ export class PosterGameComponent implements OnInit {
   }
 
   confirmLeaveTab() {
-    const target = this.pendingTab();
-    if (!target) return;
     if (this.activeTab() === 'infinite' || this.activeTab() === 'infinite-hard') {
       const mode = this.activeTab() === 'infinite-hard' ? 'infinite-hard' : 'infinite';
       this.currentStreak.set(0);
       this.saveStreakData(mode);
     }
+    const pendingMode = this.pendingMediaMode();
+    if (pendingMode) {
+      this.mediaMode.set(pendingMode);
+      localStorage.setItem(this.LS_MEDIA_MODE, pendingMode);
+      this.pendingMediaMode.set(null);
+      this.showLeaveConfirm.set(false);
+      this.switchTab(this.activeTab(), true);
+      return;
+    }
+
+    const target = this.pendingTab();
+    if (!target) return;
     this.showLeaveConfirm.set(false);
     this.pendingTab.set(null);
     this.switchTab(target);
@@ -236,12 +314,15 @@ export class PosterGameComponent implements OnInit {
   cancelLeaveTab() {
     this.showLeaveConfirm.set(false);
     this.pendingTab.set(null);
+    this.pendingMediaMode.set(null);
   }
 
-  private switchTab(tab: 'daily' | 'hard' | 'infinite' | 'infinite-hard') {
-    if (this.activeTab() === tab) return;
+  private switchTab(tab: 'daily' | 'hard' | 'infinite' | 'infinite-hard', force = false) {
+    if (!force && this.activeTab() === tab) return;
 
-    this.activeTab.set(tab);
+    if (this.activeTab() !== tab) {
+      this.activeTab.set(tab);
+    }
     this.gameStatus.set('loading');
     this.currentStepIndex.set(0);
     this.userGuess.set('');
@@ -257,9 +338,10 @@ export class PosterGameComponent implements OnInit {
     } else {
       this.syncDailyOutcome(tab);
 
+      const isTv = this.mediaMode() === 'tv';
       const movieObservable = tab === 'daily'
-        ? this.movieService.getDailyMovie()
-        : this.movieService.getDailyMovieHard();
+        ? (isTv ? this.movieService.getDailyTvShow() : this.movieService.getDailyMovie())
+        : (isTv ? this.movieService.getDailyTvShowHard() : this.movieService.getDailyMovieHard());
 
       movieObservable.subscribe({
         next: (movie) => {
@@ -300,7 +382,12 @@ export class PosterGameComponent implements OnInit {
       ? this.getSeenRandomMovies().map(s => s.movieId)
       : [];
 
-    this.movieService.getRandomMovie(seenIds, this.infiniteCountryFilter()).subscribe({
+    const isTv = this.mediaMode() === 'tv';
+    const random$ = isTv
+      ? this.movieService.getRandomTvShow(seenIds, this.infiniteCountryFilter())
+      : this.movieService.getRandomMovie(seenIds, this.infiniteCountryFilter());
+
+    random$.subscribe({
       next: (movie) => {
         this.movie.set(movie);
         this.imdbUrl.set('');
@@ -358,9 +445,13 @@ export class PosterGameComponent implements OnInit {
     this.suggestions.set([]);
   }
 
+  private getSeenRandomKey(): string {
+    return this.mediaMode() === 'tv' ? this.LS_SEEN_RANDOM_TV : this.LS_SEEN_RANDOM;
+  }
+
   private getSeenRandomMovies(): SeenMovie[] {
     try {
-      const stored = localStorage.getItem(this.LS_SEEN_RANDOM);
+      const stored = localStorage.getItem(this.getSeenRandomKey());
       if (!stored) return [];
       const parsed: SeenMovie[] = JSON.parse(stored);
       const now = Date.now();
@@ -374,7 +465,7 @@ export class PosterGameComponent implements OnInit {
     const seen = this.getSeenRandomMovies();
     const expiry = Date.now() + 2 * 24 * 60 * 60 * 1000;
     seen.push({ movieId, expiry });
-    localStorage.setItem(this.LS_SEEN_RANDOM, JSON.stringify(seen));
+    localStorage.setItem(this.getSeenRandomKey(), JSON.stringify(seen));
   }
 
   giveUp() {
@@ -420,6 +511,11 @@ export class PosterGameComponent implements OnInit {
   });
 
   currentStripCount = computed(() => this.progressionSteps[this.currentStepIndex()]);
+  mediaInputPlaceholder = computed(() => this.mediaMode() === 'tv' ? 'Nom de la série...' : 'Nom du film...');
+  mediaHintText = computed(() => this.mediaMode() === 'tv' ? '(Devinez le titre exact de la série !)' : '(Devinez le titre exact du film !)');
+  mediaResultLabel = computed(() => this.mediaMode() === 'tv' ? 'La série était :' : 'Le film était :');
+  mediaTypeLabel = computed(() => this.mediaMode() === 'tv' ? 'séries' : 'films');
+  mediaNextLabel = computed(() => this.mediaMode() === 'tv' ? 'Série Suivante →' : 'Film Suivant →');
   remainingAttempts = computed(() => Math.max(0, this.progressionSteps.length - this.currentStepIndex()));
 
   hardRotateCount = computed(() => this.stripEffects().filter(e => e === 'rotate180').length);
@@ -460,7 +556,7 @@ export class PosterGameComponent implements OnInit {
 
     const { title: guessTitle, year: guessYear } = this.extractGuess(rawGuess);
     const targetTitle = targetMovie?.title || '';
-    const targetOriginalTitle = (targetMovie as any)?.original_title || '';
+    const targetOriginalTitle = (targetMovie as any)?.original_title || (targetMovie as any)?.original_name || '';
     const targetYear = targetMovie?.release_date?.substring(0, 4) || '';
     const guessYearMatches = !guessYear || !targetYear || guessYear === targetYear;
 
@@ -533,10 +629,18 @@ export class PosterGameComponent implements OnInit {
     this.selectedMovieFromAutocomplete.set(null);
   }
 
+  private getDailyStoragePrefix(tab: 'daily' | 'hard', type: 'win' | 'loss'): string {
+    const base = tab === 'daily'
+      ? (type === 'win' ? this.LS_DAILY_PREFIX : this.LS_DAILY_LOST_PREFIX)
+      : (type === 'win' ? this.LS_DAILY_HARD_PREFIX : this.LS_DAILY_HARD_LOST_PREFIX);
+    const suffix = this.mediaMode() === 'tv' ? 'tv' : 'movie';
+    return `${base}${suffix}_`;
+  }
+
   private markDailyWin(tab: 'daily' | 'hard') {
     const today = this.getTodayKey();
-    const lsKey = tab === 'daily' ? this.LS_DAILY_PREFIX : this.LS_DAILY_HARD_PREFIX;
-    const lsLostKey = tab === 'daily' ? this.LS_DAILY_LOST_PREFIX : this.LS_DAILY_HARD_LOST_PREFIX;
+    const lsKey = this.getDailyStoragePrefix(tab, 'win');
+    const lsLostKey = this.getDailyStoragePrefix(tab, 'loss');
     localStorage.setItem(lsKey + today, 'true');
     localStorage.removeItem(lsLostKey + today);
     this.dailyCompleted.set(true);
@@ -545,16 +649,16 @@ export class PosterGameComponent implements OnInit {
 
   private markDailyLoss(tab: 'daily' | 'hard') {
     const today = this.getTodayKey();
-    const lsKey = tab === 'daily' ? this.LS_DAILY_LOST_PREFIX : this.LS_DAILY_HARD_LOST_PREFIX;
-    const lsWinKey = tab === 'daily' ? this.LS_DAILY_PREFIX : this.LS_DAILY_HARD_PREFIX;
+    const lsKey = this.getDailyStoragePrefix(tab, 'loss');
+    const lsWinKey = this.getDailyStoragePrefix(tab, 'win');
     localStorage.setItem(lsKey + today, 'true');
     localStorage.removeItem(lsWinKey + today);
   }
 
   private syncDailyOutcome(tab: 'daily' | 'hard') {
     const today = this.getTodayKey();
-    const lsWinKey = tab === 'daily' ? this.LS_DAILY_PREFIX : this.LS_DAILY_HARD_PREFIX;
-    const lsLostKey = tab === 'daily' ? this.LS_DAILY_LOST_PREFIX : this.LS_DAILY_HARD_LOST_PREFIX;
+    const lsWinKey = this.getDailyStoragePrefix(tab, 'win');
+    const lsLostKey = this.getDailyStoragePrefix(tab, 'loss');
     const dailyWon = localStorage.getItem(lsWinKey + today);
     const dailyLost = localStorage.getItem(lsLostKey + today);
 
@@ -630,7 +734,10 @@ export class PosterGameComponent implements OnInit {
   private fetchImdbLink() {
     const m = this.movie();
     if (!m) return;
-    this.movieService.getMovieExternalIds(m.id).subscribe({
+    const isTv = this.mediaMode() === 'tv';
+    const ids$ = isTv ? this.movieService.getTvExternalIds(m.id) : this.movieService.getMovieExternalIds(m.id);
+
+    ids$.subscribe({
       next: (ids: MovieExternalIds) => {
         this.imdbUrl.set(ids.imdb_id ? `https://www.imdb.com/title/${ids.imdb_id}/` : '');
       },

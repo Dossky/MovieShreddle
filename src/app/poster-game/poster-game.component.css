@@ -28,12 +28,14 @@
     gap: 20px;
 }
 
-.header-logo {
-    height: 60px;
-    width: auto;
+.title-group {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
 }
 
-.header h1 {
+.title-toggle {
     margin: 0;
     font-size: 1.8rem;
     font-weight: 800;
@@ -42,21 +44,109 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     text-transform: uppercase;
+    border: 1px solid transparent;
+    padding: 2px 6px;
+    border-radius: 6px;
+    box-shadow: none;
+    background-color: transparent;
+    cursor: pointer;
+    transition: transform 0.2s ease, text-shadow 0.2s ease;
+    position: relative;
+}
+
+.title-toggle.title-movie,
+.title-toggle.title-movie:visited {
+    background: linear-gradient(90deg, #ffb161, #ff6f91);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.title-toggle.title-tv,
+.title-toggle.title-tv:visited {
+    background: linear-gradient(90deg, #7ad7ff, #46f3c8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.layout-wrapper.tv-mode .title-toggle.title-movie,
+.layout-wrapper.tv-mode .title-toggle.title-movie:visited {
+    background: linear-gradient(90deg, #ffb161, #ff6f91);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.layout-wrapper.tv-mode .title-toggle.title-tv,
+.layout-wrapper.tv-mode .title-toggle.title-tv:visited {
+    background: linear-gradient(90deg, #7ad7ff, #46f3c8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.title-toggle:hover {
+    transform: translateY(-1px);
+    text-shadow: 0 0 14px rgba(255, 177, 97, 0.35);
+}
+
+.title-toggle.title-tv:hover {
+    text-shadow: 0 0 14px rgba(122, 215, 255, 0.35);
+}
+
+.title-toggle.active {
+    text-shadow: 0 0 18px rgba(255, 177, 97, 0.45);
+}
+
+.title-toggle:focus-visible {
+    outline: 2px solid rgba(255, 177, 97, 0.65);
+    outline-offset: 4px;
+}
+
+.title-toggle.title-tv:focus-visible {
+    outline-color: rgba(122, 215, 255, 0.75);
+}
+
+.title-toggle.title-movie.active {
+    text-shadow: 0 0 18px rgba(255, 177, 97, 0.45);
+    border-color: rgba(255, 177, 97, 0.55);
+}
+
+.title-toggle.title-tv.active {
+    text-shadow: 0 0 18px rgba(122, 215, 255, 0.45);
+    border-color: rgba(122, 215, 255, 0.55);
+}
+
+.layout-wrapper.tv-mode .title-toggle.title-movie {
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.title-separator {
+    width: 22px;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(255, 177, 97, 0.4), rgba(122, 215, 255, 0.4));
+    border-radius: 999px;
+    opacity: 0.9;
+}
+
+.header-logo {
+    height: 60px;
+    width: auto;
 }
 
 .settings-trigger {
-    background: none;
-    border: none;
-    font-size: 1.8rem;
+    background: rgba(255, 177, 97, 0.12);
+    border: 1px solid rgba(255, 177, 97, 0.4);
+    font-size: 0.95rem;
+    font-weight: 700;
     cursor: pointer;
     transition: transform 0.3s ease;
-    padding: 5px;
+    padding: 8px 12px;
     color: #ffb161;
     flex: 0 0 auto;
+    border-radius: 10px;
 }
 
 .settings-trigger:hover {
-    transform: rotate(45deg);
+    transform: translateY(-1px);
 }
 
 /* Tab Bar */
@@ -232,6 +322,16 @@
 .leave-cancel {
     background: linear-gradient(180deg, #ffd27a 0%, #f2a03c 100%);
     color: #2b1605;
+}
+
+.layout-wrapper.tv-mode .leave-confirm {
+    background: linear-gradient(180deg, #7ad7ff 0%, #3ac7f0 100%);
+    color: #041b24;
+}
+
+.layout-wrapper.tv-mode .leave-cancel {
+    background: linear-gradient(180deg, #7af3c8 0%, #46dba9 100%);
+    color: #072417;
 }
 
 @keyframes slideIn {
@@ -614,6 +714,12 @@ button:disabled {
     cursor: not-allowed;
 }
 
+.settings-trigger {
+    background: rgba(255, 177, 97, 0.12);
+    border: 1px solid rgba(255, 177, 97, 0.4);
+    box-shadow: none;
+}
+
 .give-up-btn {
     background: transparent;
     border: 1px solid rgba(255, 177, 97, 0.6);
@@ -795,6 +901,71 @@ input:checked+.slider:before {
     display: block;
 }
 
+
+.layout-wrapper.tv-mode .settings-trigger {
+    border-color: rgba(122, 215, 255, 0.5);
+    background: rgba(122, 215, 255, 0.12);
+}
+
+.layout-wrapper.tv-mode .accent {
+    color: #7ad7ff;
+}
+
+.layout-wrapper.tv-mode .tab {
+    color: #7ad7ff;
+    background: linear-gradient(180deg, rgba(122, 215, 255, 0.18) 0%, rgba(122, 215, 255, 0.04) 100%);
+    border-bottom-color: transparent;
+}
+
+.layout-wrapper.tv-mode .tab:hover {
+    color: #7ad7ff;
+    background: linear-gradient(180deg, rgba(122, 215, 255, 0.18) 0%, rgba(122, 215, 255, 0.04) 100%);
+}
+
+.layout-wrapper.tv-mode .tab.active {
+    border-bottom-color: #7ad7ff;
+}
+
+
+.layout-wrapper.tv-mode .status-card,
+.layout-wrapper.tv-mode .input-card,
+.layout-wrapper.tv-mode .history-card {
+    border-color: rgba(122, 215, 255, 0.35);
+}
+
+.layout-wrapper.tv-mode .search-input,
+.layout-wrapper.tv-mode .select-input {
+    border-color: rgba(122, 215, 255, 0.4);
+    background: rgba(122, 215, 255, 0.12);
+}
+
+.layout-wrapper.tv-mode .select-input:focus,
+.layout-wrapper.tv-mode .search-input:focus {
+    box-shadow: 0 0 0 2px rgba(122, 215, 255, 0.35);
+}
+
+.layout-wrapper.tv-mode button {
+    background: linear-gradient(180deg, #7ad7ff 0%, #3ac7f0 100%);
+    color: #041b24;
+    box-shadow: inset 0 0 0 1px rgba(122, 215, 255, 0.35);
+}
+
+.layout-wrapper.tv-mode .give-up-btn {
+    background: transparent;
+    border: 1px solid rgba(122, 215, 255, 0.6);
+    color: #d7f3ff;
+}
+
+.layout-wrapper.tv-mode .result-message.won {
+    background: linear-gradient(180deg, rgba(70, 243, 200, 0.28) 0%, rgba(70, 243, 200, 0.08) 100%);
+    border: 1px solid rgba(70, 243, 200, 0.85);
+}
+
+.layout-wrapper.tv-mode .result-message.lost {
+    background: linear-gradient(180deg, rgba(122, 215, 255, 0.22) 0%, rgba(122, 215, 255, 0.06) 100%);
+    border: 1px solid rgba(122, 215, 255, 0.75);
+}
+
 @media (max-width: 1100px) {
     .main-content {
         grid-template-columns: 1fr;
@@ -818,7 +989,7 @@ input:checked+.slider:before {
         height: 48px;
     }
 
-    .header h1 {
+    .title-toggle {
         font-size: 1.5rem;
     }
 
@@ -877,7 +1048,7 @@ input:checked+.slider:before {
         gap: 12px;
     }
 
-    .header h1 {
+    .title-toggle {
         font-size: 1.2rem;
     }
 
