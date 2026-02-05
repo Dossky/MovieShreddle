@@ -8,7 +8,7 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "predeploy": "ng build --configuration production --base-href /MovieShreddle/",
-    "deploy": "gh-pages -d dist/MovieShreddle"
+    "deploy": "gh-pages -d dist/MovieShreddle/browser"
   },
   "private": true,
   "dependencies": {
