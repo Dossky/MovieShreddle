@@ -17,6 +17,12 @@ export interface MovieExternalIds {
   imdb_id: string | null;
 }
 
+interface DailyPool {
+  start: number;
+  size: number;
+  key: number;
+}
+
 interface TvShow {
   id: number;
   name: string;
@@ -40,29 +46,24 @@ export class MovieService {
   private readonly LS_DAILY_TV_PREFIX = 'dailyTvShowId_';
   private readonly LS_DAILY_HARD_TV_PREFIX = 'dailyHardTvShowId_';
 
-  // Cache pour ne pas spammer l'API à chaque reload pendant le dev
-  // Dans un vrai daily, on pourrait stocker le film du jour en localStorage
-  private moviesCache$: Observable<Movie[]> | null = null;
-  private moviesPageCache = new Map<number, Observable<Movie[]>>();
-  private tvPageCache = new Map<number, Observable<Movie[]>>();
 
   getDailyMovie(): Observable<Movie> {
-    return this.getDailyMovieInternal(0, this.LS_DAILY_MOVIE_PREFIX);
+    return this.getDailyMovieInternal(this.DAILY_POOLS.movie, this.LS_DAILY_MOVIE_PREFIX);
   }
 
   getDailyMovieHard(): Observable<Movie> {
-    return this.getDailyMovieInternal(12345, this.LS_DAILY_HARD_MOVIE_PREFIX);
+    return this.getDailyMovieInternal(this.DAILY_POOLS.movieHard, this.LS_DAILY_HARD_MOVIE_PREFIX);
   }
 
   getDailyTvShow(): Observable<Movie> {
-    return this.getDailyTvInternal(0, this.LS_DAILY_TV_PREFIX);
+    return this.getDailyTvInternal(this.DAILY_POOLS.tv, this.LS_DAILY_TV_PREFIX);
   }
 
   getDailyTvShowHard(): Observable<Movie> {
-    return this.getDailyTvInternal(12345, this.LS_DAILY_HARD_TV_PREFIX);
+    return this.getDailyTvInternal(this.DAILY_POOLS.tvHard, this.LS_DAILY_HARD_TV_PREFIX);
   }
 
-  private getDailyMovieInternal(seedOffset: number, storagePrefix: string): Observable<Movie> {
+  private getDailyMovieInternal(pool: DailyPool, storagePrefix: string): Observable<Movie> {
     const todayKey = this.getTodayKey();
     const storedId = localStorage.getItem(storagePrefix + todayKey);
 
@@ -70,15 +71,15 @@ export class MovieService {
       const id = parseInt(storedId, 10);
       if (!Number.isNaN(id)) {
         return this.getMovieById(id).pipe(
-          catchError(() => this.pickAndStoreDailyMovie(seedOffset, storagePrefix, todayKey))
+          catchError(() => this.pickAndStoreDailyMovie(pool, storagePrefix, todayKey))
         );
       }
     }
 
-    return this.pickAndStoreDailyMovie(seedOffset, storagePrefix, todayKey);
+    return this.pickAndStoreDailyMovie(pool, storagePrefix, todayKey);
   }
 
-  private getDailyTvInternal(seedOffset: number, storagePrefix: string): Observable<Movie> {
+  private getDailyTvInternal(pool: DailyPool, storagePrefix: string): Observable<Movie> {
     const todayKey = this.getTodayKey();
     const storedId = localStorage.getItem(storagePrefix + todayKey);
 
@@ -86,91 +87,154 @@ export class MovieService {
       const id = parseInt(storedId, 10);
       if (!Number.isNaN(id)) {
         return this.getTvShowById(id).pipe(
-          catchError(() => this.pickAndStoreDailyTvShow(seedOffset, storagePrefix, todayKey))
+          catchError(() => this.pickAndStoreDailyTvShow(pool, storagePrefix, todayKey))
         );
       }
     }
 
-    return this.pickAndStoreDailyTvShow(seedOffset, storagePrefix, todayKey);
+    return this.pickAndStoreDailyTvShow(pool, storagePrefix, todayKey);
   }
 
-  private pickAndStoreDailyMovie(seedOffset: number, storagePrefix: string, todayKey: string): Observable<Movie> {
-    const today = new Date();
-    const seedBase = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate() + seedOffset;
-    const page = (this.pseudoRandom(seedBase + 9999) % 50) + 1;
+  /**
+   * Sélection du jour sans répétition.
+   *
+   * On pioche dans un classement stable (discover trié par nombre de votes,
+   * langue originale FR ou EN uniquement) plutôt que dans /popular, qui bouge
+   * tous les jours et ne contient que l'actualité.
+   *
+   * Chaque mode utilise une tranche de ce classement : rangs [start, start + size).
+   * Le jour N donne le rang start + permute(N mod size), où permute est un
+   * mélange bijectif (Feistel) : aucun rang ne revient avant `size` jours,
+   * l'ordre paraît aléatoire, et tout le monde a le même titre le même jour.
+   */
+  private readonly DAILY_POOLS: Record<'movie' | 'movieHard' | 'tv' | 'tvHard', DailyPool> = {
+    movie:     { start: 0,   size: 600,  key: 0x1f2e3d4c }, // films très connus
+    movieHard: { start: 600, size: 1000, key: 0x5a6b7c8d }, // films connus mais moins évidents
+    tv:        { start: 0,   size: 300,  key: 0x13579bdf }, // séries très connues
+    tvHard:    { start: 300, size: 500,  key: 0x2468ace0 }, // séries moins évidentes
+  };
 
-    return this.getPopularMoviesPage(page).pipe(
-      map(movies => {
-        if (!movies.length) {
+  private readonly FR_EN_LANGUAGES = 'fr|en';
+  // Pas de JT, téléréalité, talk-shows ni feuilletons quotidiens pour les séries
+  private readonly TV_EXCLUDED_GENRES = '10763|10764|10766|10767';
+
+  private dailyRank(pool: DailyPool): number {
+    const d = new Date();
+    const dayNumber = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+    return pool.start + this.permute(dayNumber % pool.size, pool.size, pool.key);
+  }
+
+  /** Bijection de [0, size) dans lui-même (réseau de Feistel + cycle walking). */
+  private permute(x: number, size: number, key: number): number {
+    const halfBits = Math.ceil(Math.ceil(Math.log2(Math.max(size, 2))) / 2);
+    const mask = (1 << halfBits) - 1;
+    let value = x;
+    do {
+      let left = value >>> halfBits;
+      let right = value & mask;
+      for (let round = 0; round < 4; round++) {
+        const f = this.mix(right ^ Math.imul(key, round + 1)) & mask;
+        [left, right] = [right, left ^ f];
+      }
+      value = (left << halfBits) | right;
+    } while (value >= size);
+    return value;
+  }
+
+  private mix(n: number): number {
+    let h = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+    h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+    return (h ^ (h >>> 16)) >>> 0;
+  }
+
+  private pickAndStoreDailyMovie(pool: DailyPool, storagePrefix: string, todayKey: string): Observable<Movie> {
+    const rank = this.dailyRank(pool);
+    const page = Math.floor(rank / 20) + 1;
+
+    return this.getDiscoverPage('movie', page).pipe(
+      map(results => this.pickAtIndex(results as Movie[], rank % 20)),
+      map(picked => {
+        if (!picked) {
           throw new Error('No movies available for daily selection');
         }
-        const index = this.pseudoRandom(seedBase) % movies.length;
-        const picked = movies[index];
-        if (picked?.id) {
-          localStorage.setItem(storagePrefix + todayKey, String(picked.id));
-        }
+        localStorage.setItem(storagePrefix + todayKey, String(picked.id));
         return picked;
       })
     );
   }
 
+  private pickAndStoreDailyTvShow(pool: DailyPool, storagePrefix: string, todayKey: string): Observable<Movie> {
+    const rank = this.dailyRank(pool);
+    const page = Math.floor(rank / 20) + 1;
 
-  private pickAndStoreDailyTvShow(seedOffset: number, storagePrefix: string, todayKey: string): Observable<Movie> {
-    const today = new Date();
-    const seedBase = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate() + seedOffset;
-    const page = (this.pseudoRandom(seedBase + 9999) % 50) + 1;
-
-    return this.getPopularTvPage(page).pipe(
-      map(shows => {
-        if (!shows.length) {
+    return this.getDiscoverPage('tv', page).pipe(
+      map(results => this.pickAtIndex(results as TvShow[], rank % 20)),
+      map(picked => {
+        if (!picked) {
           throw new Error('No TV shows available for daily selection');
         }
-        const index = this.pseudoRandom(seedBase) % shows.length;
-        const picked = shows[index];
-        if (picked?.id) {
-          localStorage.setItem(storagePrefix + todayKey, String(picked.id));
-        }
-        return picked;
+        localStorage.setItem(storagePrefix + todayKey, String(picked.id));
+        return this.mapTvToMovie(picked);
       })
     );
   }
 
-  private getPopularMovies(): Observable<Movie[]> {
-    return this.getPopularMoviesPage(1);
+  /** Élément à l'index voulu ; s'il n'a pas d'affiche, le suivant qui en a une. */
+  private pickAtIndex<T extends { id: number; poster_path: string }>(items: T[], index: number): T | undefined {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[(index + i) % items.length];
+      if (item?.poster_path) return item;
+    }
+    return undefined;
   }
 
-  private getPopularMoviesPage(page: number): Observable<Movie[]> {
-    const cached = this.moviesPageCache.get(page);
+  private discoverPageCache = new Map<string, Observable<unknown[]>>();
+
+  /** Page du classement stable : langue originale FR/EN, triée par nombre de votes. */
+  private getDiscoverPage(kind: 'movie' | 'tv', page: number): Observable<unknown[]> {
+    const key = `${kind}-${page}`;
+    const cached = this.discoverPageCache.get(key);
     if (cached) return cached;
 
-    const headers = this.getAuthHeaders();
-    const request$ = this.http.get<any>(`${this.apiUrl}/movie/popular?language=fr-FR&page=${page}`, { headers }).pipe(
-      map(response => {
-        const results = response.results as Movie[];
-        return results.filter(m => m.poster_path); // Filter out movies without poster
-      }),
-      shareReplay(1)
-    );
+    const params = [
+      'language=fr-FR',
+      'include_adult=false',
+      'sort_by=vote_count.desc',
+      `with_original_language=${encodeURIComponent(this.FR_EN_LANGUAGES)}`,
+      `page=${page}`,
+    ];
+    if (kind === 'tv') {
+      params.push(`without_genres=${encodeURIComponent(this.TV_EXCLUDED_GENRES)}`);
+    }
 
-    this.moviesPageCache.set(page, request$);
+    const request$ = this.http
+      .get<any>(`${this.apiUrl}/discover/${kind}?${params.join('&')}`, { headers: this.getAuthHeaders() })
+      .pipe(map(response => response.results as unknown[]), shareReplay(1));
+
+    this.discoverPageCache.set(key, request$);
     return request$;
   }
 
-  private getPopularTvPage(page: number): Observable<Movie[]> {
-    const cached = this.tvPageCache.get(page);
-    if (cached) return cached;
-
-    const headers = this.getAuthHeaders();
-    const request$ = this.http.get<any>(`${this.apiUrl}/tv/popular?language=fr-FR&page=${page}`, { headers }).pipe(
-      map(response => {
-        const results = response.results as TvShow[];
-        return results.filter(s => s.poster_path).map(show => this.mapTvToMovie(show));
-      }),
-      shareReplay(1)
-    );
-
-    this.tvPageCache.set(page, request$);
-    return request$;
+  /**
+   * Liste du mode infini : /popular sans filtre, ou discover trié par popularité
+   * restreint aux titres en langue originale FR/EN (filtré côté TMDB, donc fiable).
+   */
+  private randomListUrl(kind: 'movie' | 'tv', page: number, languageFilter: 'all' | 'fr_en'): string {
+    if (languageFilter !== 'fr_en') {
+      return `${this.apiUrl}/${kind}/popular?language=fr-FR&page=${page}`;
+    }
+    const params = [
+      'language=fr-FR',
+      'include_adult=false',
+      'sort_by=popularity.desc',
+      'vote_count.gte=200',
+      `with_original_language=${encodeURIComponent(this.FR_EN_LANGUAGES)}`,
+      `page=${page}`,
+    ];
+    if (kind === 'tv') {
+      params.push(`without_genres=${encodeURIComponent(this.TV_EXCLUDED_GENRES)}`);
+    }
+    return `${this.apiUrl}/discover/${kind}?${params.join('&')}`;
   }
 
   getRandomMovie(excludeIds: number[] = [], languageFilter: 'all' | 'fr_en' = 'all'): Observable<Movie> {
@@ -178,7 +242,7 @@ export class MovieService {
     const randomPage = Math.floor(Math.random() * 50) + 1;
     const headers = this.getAuthHeaders();
 
-    return this.http.get<any>(`${this.apiUrl}/movie/popular?language=fr-FR&page=${randomPage}`, { headers }).pipe(
+    return this.http.get<any>(this.randomListUrl('movie', randomPage, languageFilter), { headers }).pipe(
       map(response => {
         const source = (response.results as Movie[]).filter(m => m.poster_path);
         let movies = source;
@@ -211,7 +275,7 @@ export class MovieService {
     const randomPage = Math.floor(Math.random() * 50) + 1;
     const headers = this.getAuthHeaders();
 
-    return this.http.get<any>(`${this.apiUrl}/tv/popular?language=fr-FR&page=${randomPage}`, { headers }).pipe(
+    return this.http.get<any>(this.randomListUrl('tv', randomPage, languageFilter), { headers }).pipe(
       map(response => {
         const source = (response.results as TvShow[]).filter(s => s.poster_path).map(s => this.mapTvToMovie(s));
         let shows = source;
@@ -296,12 +360,6 @@ export class MovieService {
   private getTodayKey(): string {
     const d = new Date();
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-  }
-
-  // Générateur pseudo-aléatoire simple pour avoir le même résultat pour une graine donnée
-  private pseudoRandom(seed: number): number {
-    const x = Math.sin(seed) * 10000;
-    return Math.floor((x - Math.floor(x)) * 1000000); // Entier
   }
 
   getImageUrl(path: string): string {
